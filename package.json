@@ -4,7 +4,7 @@
   "description": "A bot that can imprison users until they roll a high enough outcome.",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "nodemon src/bot.js"
   },
   "http.proxySupport": "off",
   "author": "",
