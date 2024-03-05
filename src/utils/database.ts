@@ -1,8 +1,8 @@
 const { MongoClient } = require("mongodb");
-const { databaseUsername, databasePassword } = require("../../config.json");
+const { databasePassword } = require("../../config.json");
 
 export async function connectToDatabase() {
-  const uri = `mongodb+srv://${databaseUsername}:${databasePassword}@cluster0.i0chuda.mongodb.net/`; // Replace with your MongoDB connection URI
+  const uri = `mongodb+srv://islandinthesun:${databasePassword}@cluster0.qvl3yx7.mongodb.net/`; // Replace with your MongoDB connection URI
   const client = new MongoClient(uri);
 
   try {

@@ -1,4 +1,5 @@
 import { handleInteractions, registerCommands } from "./utils/interaction";
+
 const Discord = require("discord.js");
 const { token } = require("../config.json");
 

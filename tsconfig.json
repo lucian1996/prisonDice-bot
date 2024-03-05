@@ -6,5 +6,5 @@
     "strict": true,
     "esModuleInterop": true
   },
-  "include": ["./src/**/*.ts"]
+  "include": ["./src/**/*.ts", "quiet-silence-9bd5/src/index.ts"]
 }
