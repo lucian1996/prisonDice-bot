@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
-import { CommandInteraction, Role, Permissions, APIRole } from "discord.js";
+import { CommandInteraction, Role, APIRole } from "discord.js";
 import { connectToDatabase } from "../utils/database";
 
 module.exports = {
@@ -11,9 +11,32 @@ module.exports = {
         .setName("admin_role")
         .setDescription("The role to grant access to administrative commands.")
         .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("prison_channel")
+        .setDescription("Set the designated prison channel.")
+        .setRequired(true)
+    )
+    .addStringOption((option) =>
+      option
+        .setName("dice_cooldown_minutes")
+        .setDescription("Set a designated cooldown for dice rolls in minutes.")
+        .setRequired(true)
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("dice_min_success")
+        .setDescription("Set the minimum success dice count.")
+        .setRequired(false)
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("dice_max_success")
+        .setDescription("Set the maximum success dice count.")
+        .setRequired(false)
     ),
   async execute(interaction: CommandInteraction) {
-    // Ensure interaction.member is a GuildMember
     const member = interaction.member;
     if (!member) {
       return interaction.reply({
@@ -22,34 +45,39 @@ module.exports = {
       });
     }
 
-    // Get the admin_role option
     const adminRoleOption = interaction.options.get("admin_role");
-    if (!adminRoleOption) {
+    const prisonChannelOption = interaction.options.get("prison_channel");
+    const diceCooldownOption = interaction.options.get("dice_cooldown_minutes");
+    const minSuccessOption = interaction.options.get("dice_min_success");
+    const maxSuccessOption = interaction.options.get("dice_max_success");
+
+    if (!adminRoleOption || !prisonChannelOption || !diceCooldownOption) {
       return interaction.reply({
-        content: "Invalid or missing admin_role option.",
+        content: "Missing required options.",
         ephemeral: true,
       });
     }
 
     const adminRole: Role | APIRole | null | undefined = adminRoleOption.role;
-    if (!adminRole) {
+    const prisonChannel: string | number | boolean | undefined =
+      prisonChannelOption.value;
+    const diceCooldown: string | number | boolean | undefined =
+      diceCooldownOption.value;
+    const minSuccess: string | number | boolean | null =
+      minSuccessOption?.value ?? null;
+    const maxSuccess: string | number | boolean | null =
+      maxSuccessOption?.value ?? null;
+
+    if (!adminRole || !prisonChannel || !diceCooldown) {
       return interaction.reply({
-        content: "The provided admin role does not exist.",
+        content: "Invalid options provided.",
         ephemeral: true,
       });
     }
 
-    // Check if the member has the ADMINISTRATOR permission
-    const permissions = member.permissions;
-    // console.log(permissions);
-    // if (!permissions || !permissions.has(Permissions.FLAGS.ADMINISTRATOR)) {
-    //   return interaction.reply({
-    //     content: "You don't have permission to configure the bot.",
-    //     ephemeral: true,
-    //   });
-    // }
-
     const db = await connectToDatabase();
+
+    // Update or insert admin role into the database
     await db
       .collection("config")
       .updateOne(
@@ -58,8 +86,48 @@ module.exports = {
         { upsert: true }
       );
 
+    // Update or insert prison channel into the database
+    await db
+      .collection("config")
+      .updateOne(
+        { _id: "prison_channel" },
+        { $set: { value: prisonChannel } },
+        { upsert: true }
+      );
+
+    // Update or insert dice cooldown into the database
+    await db
+      .collection("config")
+      .updateOne(
+        { _id: "dice_cooldown_minutes" },
+        { $set: { value: diceCooldown } },
+        { upsert: true }
+      );
+
+    // Update or insert min success dice count into the database
+    if (minSuccess !== null) {
+      await db
+        .collection("config")
+        .updateOne(
+          { _id: "dice_min_success" },
+          { $set: { value: minSuccess } },
+          { upsert: true }
+        );
+    }
+
+    // Update or insert max success dice count into the database
+    if (maxSuccess !== null) {
+      await db
+        .collection("config")
+        .updateOne(
+          { _id: "dice_max_success" },
+          { $set: { value: maxSuccess } },
+          { upsert: true }
+        );
+    }
+
     await interaction.reply({
-      content: `Admin role set to ${adminRole.name}.`,
+      content: "Configuration updated successfully.",
       ephemeral: true,
     });
   },

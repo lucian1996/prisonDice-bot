@@ -1,4 +1,11 @@
-import { CommandInteraction, GuildMember, Role, User } from "discord.js";
+import {
+  CommandInteraction,
+  GuildMember,
+  Role,
+  User,
+  TextChannel,
+  VoiceChannel,
+} from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { connectToDatabase } from "../utils/database";
 
@@ -20,6 +27,10 @@ module.exports = {
     const db = await connectToDatabase();
     const config = await db.collection("config").findOne({ _id: "admin_role" });
     const adminRoleId = config?.value;
+    const prisonConfig = await db
+      .collection("config")
+      .findOne({ _id: "prison_channel" });
+    const prisonChannelId = prisonConfig?.value;
 
     const checkPermission = () => {
       const member = interaction.member as GuildMember;
@@ -69,15 +80,25 @@ module.exports = {
       return respondAndExit("Prisoner role not found.");
     }
 
+    const prisonChannel = interaction.guild?.channels.cache.get(
+      prisonChannelId
+    ) as VoiceChannel;
+    if (!prisonChannel) {
+      return respondAndExit("Prison voice channel not found.");
+    }
+
     try {
       const rolesToRemove = targetMember.roles.cache
         .filter((role) => role.name !== "@everyone")
         .map((role) => role.id);
       await targetMember.roles.remove(rolesToRemove);
       await targetMember.roles.add(prisonerRole);
-      await interaction.reply(`Added the "prisoner" role to ${user}.`);
+      await targetMember.voice.setChannel(prisonChannel);
+      await interaction.reply(
+        `Moved ${user} to the prison voice channel and added the "prisoner" role.`
+      );
     } catch {
-      await interaction.reply(`${user} outside of prisonDice role scope.`);
+      await interaction.reply(`${user} outside of prison role scope.`);
     }
   },
 };

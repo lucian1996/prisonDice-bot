@@ -5,6 +5,7 @@ import { connectToDatabase } from "../utils/database";
 interface UserRolesMap extends Map<string, Role[]> {}
 
 const userRolesMap: UserRolesMap = new Map();
+const cooldowns: Map<string, number> = new Map();
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,8 +15,14 @@ module.exports = {
     const member = interaction.member as GuildMember;
     const guild = interaction.guild;
 
+    const db = await connectToDatabase();
+    const config = await db.collection("config").findOne({}); // Retrieve all config values
+
+    const diceCooldown = config.dice_cooldown_minutes;
+    const minSuccess = config.dice_min_success;
+    const maxSuccess = config.dice_max_success;
+
     if (!member || !guild) {
-      // Handle if member or guild is not available
       return;
     }
 
@@ -26,14 +33,30 @@ module.exports = {
     let response = ""; // Initialize response variable
 
     if (!prisonerRole) {
-      // Handle if prisonerRole is not found
       response += "The prisoner role is not found.\n";
       await interaction.reply(response);
       return;
     }
+    const now = Date.now();
+    const cooldownAmount = diceCooldown * 1000 * 60; // Convert minutes to milliseconds
+
+    if (cooldowns.has(member.id)) {
+      const expirationTime = member
+        ? (cooldowns.get(member.id) || 0) + cooldownAmount
+        : 0;
+
+      if (now < expirationTime) {
+        const timeLeftMinutes = (expirationTime - now) / 1000 / 60;
+        return interaction.reply(
+          `Unlucky, please wait ${timeLeftMinutes.toFixed(
+            1
+          )} more minutes before reusing the \`roll\` command.`
+        );
+      }
+    }
 
     if (member.roles.cache.has(prisonerRole.id)) {
-      response += "Must roll 20/100 to redeem privileges.\n";
+      response += `Must roll ${minSuccess}/${maxSuccess} to redeem privileges.\n`;
       const roll1 = Math.floor(Math.random() * 50) + 1;
       const roll2 = Math.floor(Math.random() * 50) + 1;
       response += `Rolling... **${roll1}, ${roll2}**\n`;
@@ -46,9 +69,7 @@ module.exports = {
         .findOne({ _id: member.id });
       const userRoles = userRolesData?.roles || [];
 
-      console.log("userRoles:", userRoles); // Debugging
-
-      if (roll1 + roll2 >= 20) {
+      if (roll1 + roll2 >= minSuccess && roll1 + roll2 <= maxSuccess) {
         if (userRoles) {
           try {
             await member.roles.add(userRoles);
@@ -65,6 +86,9 @@ module.exports = {
       } else {
         response += "Unlucky. Try again next time.\n";
       }
+
+      cooldowns.set(member.id, now);
+      setTimeout(() => cooldowns.delete(member.id), cooldownAmount); // Remove cooldown after specified time
 
       // Check if any member in the server has the "prisoner" role after removing it from the current member
       const membersWithPrisonerRole = guild.members.cache.filter((member) =>
