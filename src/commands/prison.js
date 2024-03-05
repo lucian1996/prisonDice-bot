@@ -18,40 +18,39 @@ module.exports = {
         .setRequired(true)
     ),
   async execute(interaction) {
+    if (!interaction.member.roles.cache.some((role) => role.name === "Admin")) {
+      return interaction.reply({
+        content: "You don't have permission to prison other users.",
+        ephemeral: true,
+      });
+    }
     const user = interaction.options.getUser("user");
     const member = await interaction.guild.members.fetch(user);
 
-    // Store user roles
     userRolesMap.set(
       user.id,
       member.roles.cache.map((role) => role.id)
     );
 
-    let prisonerRole = interaction.guild.roles.cache.find(
-      (role) => role.name === "prisoner"
-    );
-
-    // If "prisoner" role doesn't exist, create it
-    if (!prisonerRole) {
-      prisonerRole = await interaction.guild.roles.create({
+    let prisonerRole =
+      interaction.guild.roles.cache.find((role) => role.name === "prisoner") ||
+      (await interaction.guild.roles.create({
         name: "prisoner",
         permissions: [],
         reason: "Creating prisoner role for restricted permissions",
-      });
+      }));
+
+    try {
+      const rolesToRemove = member.roles.cache
+        .filter((role) => role.name !== "@everyone")
+        .map((role) => role.id);
+      await member.roles.remove(rolesToRemove);
+      await member.roles.add(prisonerRole);
+      await interaction.reply(`Added the "prisoner" role to ${user}.`);
+    } catch {
+      await interaction.reply(`${user} outside of prisonDice role scope.`);
     }
-
-    // Remove all roles except @everyone
-    const rolesToRemove = member.roles.cache
-      .filter((role) => role.name !== "@everyone")
-      .map((role) => role.id);
-    await member.roles.remove(rolesToRemove);
-
-    // Add the "prisoner" role
-    await member.roles.add(prisonerRole);
-
-    await interaction.reply(`Added the "prisoner" role to ${user}.`);
   },
 };
 
-// Exporting the userRolesMap for access in other commands
 module.exports.userRolesMap = userRolesMap;

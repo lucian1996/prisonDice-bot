@@ -3,10 +3,8 @@ const { userRolesMap } = require("./prison.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("dice")
-    .setDescription(
-      "Rolls a dice and allows users with the 'prisoner' role to attempt to roll out of 90/100."
-    ),
+    .setName("roll")
+    .setDescription("Roll a dice to allow a user to gamble for their freedom."),
   async execute(interaction) {
     const member = interaction.member;
     const prisonerRole = interaction.guild.roles.cache.find(
@@ -28,10 +26,15 @@ module.exports = {
 
       if (roll1 + roll2 > 10) {
         if (userRoles) {
-          await member.roles.add(userRoles);
-          userRolesMap.delete(member.user.id);
-          await member.roles.remove(prisonerRole);
-          response += "Hell yea. Your privileges are restored.\n";
+          try {
+            await member.roles.add(userRoles);
+            userRolesMap.delete(member.user.id);
+            await member.roles.remove(prisonerRole);
+            response += "Hell yea. Your privileges are restored.\n";
+          } catch {
+            const user = interaction.options.getUser("user");
+            response += `${user} outside of prisonDice role scope.`;
+          }
         } else {
           response += "Error: Failed to retrieve user roles.\n";
         }
