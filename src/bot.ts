@@ -1,6 +1,6 @@
+import { handleInteractions, registerCommands } from "./utils/interaction";
 const Discord = require("discord.js");
 const { token } = require("../config.json");
-const { registerCommands, handleInteractions } = require("./utils/interaction");
 
 const client = new Discord.Client({
   intents: [

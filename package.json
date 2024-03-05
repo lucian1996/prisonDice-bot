@@ -4,7 +4,7 @@
   "description": "A bot that can imprison users until they roll a high enough outcome.",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon src/bot.js"
+    "start": "nodemon src/bot.ts"
   },
   "http.proxySupport": "off",
   "author": "",
@@ -13,9 +13,12 @@
     "@discordjs/rest": "^2.2.0",
     "axios": "^1.6.7",
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "mongodb": "^6.4.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   }
 }

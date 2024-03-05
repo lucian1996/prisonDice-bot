@@ -1,17 +1,36 @@
-const { SlashCommandBuilder } = require("@discordjs/builders");
-const { userRolesMap } = require("./prison.js");
+import { SlashCommandBuilder } from "@discordjs/builders";
+import { CommandInteraction, GuildMember, Role } from "discord.js";
+import { connectToDatabase } from "../utils/database";
+
+interface UserRolesMap extends Map<string, Role[]> {}
+
+const userRolesMap: UserRolesMap = new Map();
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("roll")
     .setDescription("Roll a dice to allow a user to gamble for their freedom."),
-  async execute(interaction) {
-    const member = interaction.member;
-    const prisonerRole = interaction.guild.roles.cache.find(
+  async execute(interaction: CommandInteraction) {
+    const member = interaction.member as GuildMember;
+    const guild = interaction.guild;
+
+    if (!member || !guild) {
+      // Handle if member or guild is not available
+      return;
+    }
+
+    const prisonerRole = guild.roles.cache.find(
       (role) => role.name === "prisoner"
     );
 
     let response = ""; // Initialize response variable
+
+    if (!prisonerRole) {
+      // Handle if prisonerRole is not found
+      response += "The prisoner role is not found.\n";
+      await interaction.reply(response);
+      return;
+    }
 
     if (member.roles.cache.has(prisonerRole.id)) {
       response += "Must roll 10/100 to redeem privileges.\n";
@@ -21,7 +40,12 @@ module.exports = {
 
       response += `You rolled a ${roll1 + roll2}\n`;
 
-      const userRoles = userRolesMap.get(member.user.id);
+      const db = await connectToDatabase();
+      const userRolesData = await db
+        .collection("user_roles")
+        .findOne({ _id: member.id });
+      const userRoles = userRolesData?.roles || [];
+
       console.log("userRoles:", userRoles); // Debugging
 
       if (roll1 + roll2 > 10) {
@@ -43,14 +67,14 @@ module.exports = {
       }
 
       // Check if any member in the server has the "prisoner" role after removing it from the current member
-      const membersWithPrisonerRole = interaction.guild.members.cache.filter(
-        (member) => member.roles.cache.has(prisonerRole.id)
-      );
+      const membersWithPrisonerRole = guild.members.cache.filter((member) =>
+        member.roles.cache.has(prisonerRole.id)
+      ) as unknown as GuildMember[];
 
       // If no one else has the "prisoner" role, delete the role from the server
       if (
-        membersWithPrisonerRole.size === 1 &&
-        membersWithPrisonerRole.first().id === member.id
+        membersWithPrisonerRole.length === 1 &&
+        membersWithPrisonerRole[0].id === member.id
       ) {
         try {
           await prisonerRole.delete();

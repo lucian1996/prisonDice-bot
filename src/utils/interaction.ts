@@ -1,15 +1,18 @@
-const { REST, Routes } = require("discord.js");
+import { Client, CommandInteraction } from "discord.js";
+
+const { REST } = require("discord.js");
+const { Routes } = require("discord-api-types/v9");
 const { token } = require("../../config.json");
 const fs = require("fs");
 const path = require("path");
 
 // Function to register commands
-const registerCommands = async (client) => {
-  const commands = [];
+export const registerCommands = async (client: Client) => {
+  const commands: any[] = []; // Adjust type as needed
   const commandsPath = path.join(__dirname, "..", "commands");
   const commandFiles = fs
     .readdirSync(commandsPath)
-    .filter((file) => file.endsWith(".js"));
+    .filter((file: string) => file.endsWith(".ts"));
   for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
     const command = require(filePath);
@@ -22,8 +25,8 @@ const registerCommands = async (client) => {
     }
   }
   try {
-    const rest = new REST().setToken(token);
-    const data = await rest.put(Routes.applicationCommands(client.user.id), {
+    const rest = new REST({ version: "9" }).setToken(token); // Specify version for REST constructor
+    const data = await rest.put(Routes.applicationCommands(client.user?.id), {
       body: commands,
     });
     console.log(
@@ -34,13 +37,13 @@ const registerCommands = async (client) => {
   }
 };
 
-const handleInteractions = async (interaction) => {
+export const handleInteractions = async (interaction: CommandInteraction) => {
   if (!interaction.isCommand()) return;
 
   const commandName = interaction.commandName;
 
   try {
-    const command = require(`../commands/${commandName}.js`);
+    const command = require(`../commands/${commandName}.ts`);
     await command.execute(interaction);
   } catch (error) {
     console.error(`Error executing command ${commandName}:`, error);
