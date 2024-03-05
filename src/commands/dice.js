@@ -1,6 +1,5 @@
-// ./commands/dice.js
-
 const { SlashCommandBuilder } = require("@discordjs/builders");
+const { userRolesMap } = require("./prison.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -14,29 +13,54 @@ module.exports = {
       (role) => role.name === "prisoner"
     );
 
-    // Check if the user has the 'prisoner' role
-    if (member.roles.cache.has(prisonerRole.id)) {
-      await interaction.reply("Must roll 90/100 to redeem privlages.");
-      await interaction.followUp("Rolling...");
+    let response = ""; // Initialize response variable
 
-      // Simulate dice roll (1-100)
+    if (member.roles.cache.has(prisonerRole.id)) {
+      response += "Must roll 10/100 to redeem privileges.\n";
       const roll1 = Math.floor(Math.random() * 50) + 1;
       const roll2 = Math.floor(Math.random() * 50) + 1;
+      response += `Rolling... **${roll1}, ${roll2}**\n`;
 
-      // Display the roll outcome
-      await interaction.followUp(`**${roll1}, ${roll2}**`);
-      await interaction.followUp(`you rolled a ${roll1 + roll2}`);
+      response += `You rolled a ${roll1 + roll2}\n`;
 
-      // Check if the roll is above 90
-      if (roll1 + roll2 > 90) {
-        // Remove the 'prisoner' role
-        await member.roles.remove(prisonerRole);
-        await interaction.followUp("hell yea.");
+      const userRoles = userRolesMap.get(member.user.id);
+      console.log("userRoles:", userRoles); // Debugging
+
+      if (roll1 + roll2 > 10) {
+        if (userRoles) {
+          await member.roles.add(userRoles);
+          userRolesMap.delete(member.user.id);
+          await member.roles.remove(prisonerRole);
+          response += "Hell yea. Your privileges are restored.\n";
+        } else {
+          response += "Error: Failed to retrieve user roles.\n";
+        }
       } else {
-        await interaction.followUp("unlucky.");
+        response += "Unlucky. Try again next time.\n";
+      }
+
+      // Check if any member in the server has the "prisoner" role after removing it from the current member
+      const membersWithPrisonerRole = interaction.guild.members.cache.filter(
+        (member) => member.roles.cache.has(prisonerRole.id)
+      );
+
+      // If no one else has the "prisoner" role, delete the role from the server
+      if (
+        membersWithPrisonerRole.size === 1 &&
+        membersWithPrisonerRole.first().id === member.id
+      ) {
+        try {
+          await prisonerRole.delete();
+          console.log('Deleted "prisoner" role.');
+        } catch (error) {
+          console.error('Error deleting "prisoner" role:', error);
+        }
       }
     } else {
-      await interaction.reply("You are not a prisoner.");
+      response += "You are not a prisoner.\n";
     }
+
+    // Send all responses in one go
+    await interaction.reply(response);
   },
 };
