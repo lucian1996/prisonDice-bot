@@ -33,7 +33,7 @@ module.exports = {
     }
 
     if (member.roles.cache.has(prisonerRole.id)) {
-      response += "Must roll 10/100 to redeem privileges.\n";
+      response += "Must roll 20/100 to redeem privileges.\n";
       const roll1 = Math.floor(Math.random() * 50) + 1;
       const roll2 = Math.floor(Math.random() * 50) + 1;
       response += `Rolling... **${roll1}, ${roll2}**\n`;
@@ -48,7 +48,7 @@ module.exports = {
 
       console.log("userRoles:", userRoles); // Debugging
 
-      if (roll1 + roll2 > 10) {
+      if (roll1 + roll2 >= 20) {
         if (userRoles) {
           try {
             await member.roles.add(userRoles);
