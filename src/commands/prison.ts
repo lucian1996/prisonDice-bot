@@ -7,37 +7,11 @@ import {
 } from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { connectToDatabase } from "../utils/database";
-import { respondAndExit } from "../utils/utils";
-
-const checkPermission = async (
-  interaction: CommandInteraction,
-  adminRoleId: string
-): Promise<boolean> => {
-  const member = interaction.member as GuildMember;
-  return member?.roles.cache.some((role) => role.id === adminRoleId);
-};
-
-const getPrisonerRole = async (
-  interaction: CommandInteraction,
-  prisonerRoleId?: string
-): Promise<Role | undefined> => {
-  if (prisonerRoleId) {
-    const existingRole = interaction.guild?.roles.cache.get(prisonerRoleId);
-    if (existingRole) return existingRole;
-  }
-
-  try {
-    const newRole = await interaction.guild?.roles.create({
-      name: "prisoner",
-      permissions: [],
-      reason: "Creating prisoner role for restricted permissions",
-    });
-    return newRole;
-  } catch (error) {
-    console.log("Failed to create prisoner role:", error);
-    return undefined;
-  }
-};
+import {
+  checkPermission,
+  getPrisonerRole,
+  respondAndExit,
+} from "../utils/utils";
 
 const getPrisonChannel = async (
   interaction: CommandInteraction,
@@ -47,7 +21,7 @@ const getPrisonChannel = async (
   return channel instanceof VoiceChannel ? channel : undefined;
 };
 
-const updateUserRoles = async (
+const storeUserRoles = async (
   db: Awaited<ReturnType<typeof connectToDatabase>>,
   user: User,
   roles: string[]
@@ -64,13 +38,12 @@ const updateUserRoles = async (
 
 const storeUserPreviousVoiceChannel = async (
   db: Awaited<ReturnType<typeof connectToDatabase>>,
-  member: GuildMember,
-  prisonChannel: VoiceChannel
+  member: GuildMember
 ) => {
   const userId = member.user.id;
   const currentChannelId = member.voice.channelId; // Fetch current voice channel ID
 
-  if (currentChannelId && currentChannelId !== prisonChannel.id) {
+  if (currentChannelId) {
     await db.collection("user_previous_channel").updateOne(
       { id: userId },
       { $set: { channelId: currentChannelId } }, // Use the fetched channel ID
@@ -96,26 +69,22 @@ module.exports = {
 
   async execute(interaction: CommandInteraction) {
     const db = await connectToDatabase();
-    const config = await db.collection("config").findOne({ id: "admin_role" });
-    const adminRoleId = config?.value;
+    const adminRoleDbObj = await db
+      .collection("config")
+      .findOne({ id: "admin_role" });
+    const adminRoleId = adminRoleDbObj?.value;
 
     if (!adminRoleId) {
       await respondAndExit(interaction, "Admin role not configured.");
       return;
     }
 
-    const prisonConfig = await db
+    const prisonChannelDbObj = await db
       .collection("config")
       .findOne({ id: "prison_channel" });
-    const prisonChannelId = prisonConfig?.value;
-
-    const prisonerRoleConfig = await db
-      .collection("config")
-      .findOne({ id: "prisoner_role" });
-    const prisonerRoleId = prisonerRoleConfig?.value;
+    const prisonChannelId = prisonChannelDbObj?.value;
 
     const hasPermission = await checkPermission(interaction, adminRoleId);
-
     if (!hasPermission) {
       await respondAndExit(
         interaction,
@@ -125,7 +94,6 @@ module.exports = {
     }
 
     const user = interaction.options.getUser("user");
-
     if (!user) {
       await respondAndExit(interaction, "User not found.");
       return;
@@ -135,39 +103,26 @@ module.exports = {
     const targetMember = fetchedMember as GuildMember;
     const userRoles = targetMember.roles.cache.map((role) => role.id);
 
-    await updateUserRoles(db, user, userRoles);
-
-    const prisonerRole = await getPrisonerRole(interaction, prisonerRoleId);
-
-    if (!prisonerRole) {
-      await respondAndExit(interaction, "Prisoner role not found.");
-      return;
-    }
-    if (!prisonChannelId) {
-      await respondAndExit(interaction, "Prison channel not configured.");
-      return;
-    }
+    await storeUserRoles(db, user, userRoles);
 
     const prisonChannel = await getPrisonChannel(interaction, prisonChannelId);
-
-    if (!prisonChannel) {
-      await respondAndExit(interaction, "Prison voice channel not found.");
-      return;
-    }
 
     try {
       const rolesToRemove = targetMember.roles.cache
         .filter((role) => role.name !== "@everyone")
         .map((role) => role.id);
-
       await targetMember.roles.remove(rolesToRemove);
+
+      const prisonerRole = await getPrisonerRole(db);
       await targetMember.roles.add(prisonerRole);
 
       // Store the user's previous voice channel before moving them
-      await storeUserPreviousVoiceChannel(db, targetMember, prisonChannel);
+      await storeUserPreviousVoiceChannel(db, targetMember);
 
       if (targetMember.voice.channel) {
-        await targetMember.voice.setChannel(prisonChannel);
+        if (prisonChannel) {
+          await targetMember.voice.setChannel(prisonChannel);
+        }
         await respondAndExit(
           interaction,
           `Moved ${user} to the prison voice channel and added the "prisoner" role.`

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
-import { CommandInteraction, Role, APIRole } from "discord.js";
+import { CommandInteraction } from "discord.js";
 import { connectToDatabase } from "../utils/database";
 
 module.exports = {
@@ -16,7 +16,7 @@ module.exports = {
       option
         .setName("prisoner_role")
         .setDescription("This role should have restricted permissions.")
-        .setRequired(true)
+        .setRequired(false)
     )
     .addChannelOption((option) =>
       option
@@ -61,35 +61,23 @@ module.exports = {
       const minSuccessOption = interaction.options.get("dice_min_success");
       const maxSuccessOption = interaction.options.get("dice_max_success");
 
-      if (!adminRoleOption || !prisonerRoleOption) {
-        return interaction.reply({
-          content: "Missing required options.",
-          ephemeral: true,
-        });
-      }
-
-      // Parse dice cooldown value
+      // Parse values
       const diceCooldownOptionValue = diceCooldownOption?.value;
       const diceCooldown =
         diceCooldownOptionValue !== undefined
           ? parseInt(String(diceCooldownOptionValue))
           : 0;
-
-      // Parse min success value
       const minSuccessOptionValue = minSuccessOption?.value;
       const minSuccess =
         minSuccessOptionValue !== undefined
           ? parseInt(String(minSuccessOptionValue))
           : 0;
-
-      // Parse max success value
       const maxSuccessOptionValue = maxSuccessOption?.value;
       const maxSuccess =
         maxSuccessOptionValue !== undefined
           ? parseInt(String(maxSuccessOptionValue))
           : 100;
 
-      // Check if minSuccess and maxSuccess are within the range of 0 to 100
       if (
         minSuccess < 0 ||
         minSuccess > 100 ||
@@ -102,13 +90,12 @@ module.exports = {
         });
       }
 
-      const db = await connectToDatabase();
-
-      const adminRole = adminRoleOption.role;
-      const prisonerRole = prisonerRoleOption.role;
+      const adminRole = adminRoleOption?.role;
+      const prisonerRole = prisonerRoleOption?.role;
       const prisonChannelId = prisonChannelOption?.channel?.id;
 
-      // Update admin role in the database
+      // Update database
+      const db = await connectToDatabase();
       await db
         .collection("config")
         .updateOne(
@@ -116,8 +103,6 @@ module.exports = {
           { $set: { value: adminRole?.id } },
           { upsert: true }
         );
-
-      // Update prisoner role in the database
       await db
         .collection("config")
         .updateOne(
@@ -125,8 +110,6 @@ module.exports = {
           { $set: { value: prisonerRole?.id } },
           { upsert: true }
         );
-
-      // Update prison channel in the database
       await db
         .collection("config")
         .updateOne(
@@ -134,8 +117,6 @@ module.exports = {
           { $set: { value: prisonChannelId } },
           { upsert: true }
         );
-
-      // Update dice cooldown in the database
       await db
         .collection("config")
         .updateOne(
@@ -143,8 +124,6 @@ module.exports = {
           { $set: { value: diceCooldown } },
           { upsert: true }
         );
-
-      // Update min success dice count in the database
       await db
         .collection("config")
         .updateOne(
@@ -152,8 +131,6 @@ module.exports = {
           { $set: { value: minSuccess } },
           { upsert: true }
         );
-
-      // Update max success dice count in the database
       await db
         .collection("config")
         .updateOne(
@@ -161,7 +138,6 @@ module.exports = {
           { $set: { value: maxSuccess } },
           { upsert: true }
         );
-
       await interaction.reply({
         content: "Configuration successfully updated.",
         ephemeral: true,

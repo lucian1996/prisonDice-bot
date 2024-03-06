@@ -6,36 +6,40 @@ import {
   VoiceChannel,
 } from "discord.js";
 import { connectToDatabase } from "../utils/database";
-import { respondAndExit } from "../utils/utils";
+import { getPrisonerRole, respondAndExit } from "../utils/utils";
 
 interface UserRolesMap extends Map<string, Role[]> {}
 
 const userRolesMap: UserRolesMap = new Map();
 const cooldowns: Map<string, number> = new Map();
 
-const getPrisonerRole = async (
-  guild: GuildMember["guild"]
-): Promise<Role | undefined> => {
-  const prisonerRole = guild.roles.cache.find(
-    (role) => role.name === "prisoner"
-  );
-  return prisonerRole;
-};
+// Function to check if a user is on cooldown
+function checkCooldown(
+  memberId: string,
+  cooldowns: Map<string, number>,
+  cooldownAmount: number
+): boolean {
+  const now = Date.now();
+  const expirationTime = cooldowns.get(memberId) || 0 + cooldownAmount;
+  if (now < expirationTime) {
+    return true; // User is on cooldown
+  }
+  return false; // User is not on cooldown
+}
 
 const getUserPreviousVoiceChannel = async (
   member: GuildMember
 ): Promise<VoiceChannel | undefined> => {
   const userId = member.user.id;
   const db = await connectToDatabase();
-  const userPreviousChannelData = await db
+
+  const userPreviousChannelDbObj = await db
     .collection("user_previous_channel")
     .findOne({ id: userId });
-
-  const previousChannelId = userPreviousChannelData?.channelId; // Access the channelId property
-
+  const previousChannelId = userPreviousChannelDbObj?.channelId;
   if (!previousChannelId) {
     return undefined;
-  }
+  } // Return if no Previous Channel ID
 
   const previousChannel = member.guild.channels.cache.get(previousChannelId);
   return previousChannel instanceof VoiceChannel ? previousChannel : undefined;
@@ -46,20 +50,9 @@ module.exports = {
     .setName("roll")
     .setDescription("Roll a dice to allow a user to gamble for their freedom."),
   async execute(interaction: CommandInteraction) {
+    let response = "";
+    const now = Date.now();
     const member = interaction.member as GuildMember;
-    const guild = interaction.guild;
-
-    if (!member || !guild) {
-      return;
-    }
-
-    const prisonerRole = await getPrisonerRole(guild);
-
-    if (!prisonerRole) {
-      await respondAndExit(interaction, "The prisoner role is not found.");
-      return;
-    }
-
     const db = await connectToDatabase();
     const config = await db.collection("config").find({}).toArray();
 
@@ -77,27 +70,22 @@ module.exports = {
       }
     });
 
-    const now = Date.now();
     const cooldownAmount = diceCooldown * 1000 * 60; // Convert minutes to milliseconds
+    const expirationTime = cooldowns.get(member.id) || 0 + cooldownAmount; // Define expirationTime here
 
-    if (cooldowns.has(member.id)) {
-      const expirationTime = cooldowns.get(member.id) || 0 + cooldownAmount;
-
-      if (now < expirationTime) {
-        const timeLeftMinutes = (expirationTime - now) / 1000 / 60;
-        await respondAndExit(
-          interaction,
-          `Unlucky, please wait ${timeLeftMinutes.toFixed(
-            1
-          )} more minutes before reusing the \`roll\` command.`
-        );
-        return;
-      }
+    const isOnCooldown = checkCooldown(member.id, cooldowns, cooldownAmount);
+    if (isOnCooldown) {
+      const timeLeftMinutes = (expirationTime - now) / 1000 / 60;
+      await respondAndExit(
+        interaction,
+        `Unlucky, please wait ${timeLeftMinutes.toFixed(
+          1
+        )} more minutes before reusing the \`roll\` command.`
+      );
+      return;
     }
 
-    let response = "";
-
-    if (member.roles.cache.has(prisonerRole.id)) {
+    if (member.roles.cache.some((role) => role.name === "prisoner")) {
       response += `Must roll ${minSuccess}/${maxSuccess} to redeem privileges.\n`;
       const roll1 = Math.floor(Math.random() * 50) + 1;
       const roll2 = Math.floor(Math.random() * 50) + 1;
@@ -109,16 +97,17 @@ module.exports = {
         .collection("user_roles")
         .findOne({ id: member.id });
       const userRoles = userRolesData?.roles || [];
+      const prisonerRole = await getPrisonerRole(db);
 
       if (roll1 + roll2 >= minSuccess && roll1 + roll2 <= maxSuccess) {
         if (userRoles.length > 0) {
           try {
             await member.roles.add(userRoles);
             userRolesMap.delete(member.user.id);
+
             await member.roles.remove(prisonerRole);
 
             const previousChannel = await getUserPreviousVoiceChannel(member);
-            console.log(previousChannel);
             if (previousChannel) {
               await member.voice.setChannel(previousChannel);
               response += `You have been moved back to ${previousChannel.name}.\n`;
@@ -139,22 +128,6 @@ module.exports = {
 
       cooldowns.set(member.id, now);
       setTimeout(() => cooldowns.delete(member.id), cooldownAmount); // Remove cooldown after specified time
-
-      const membersWithPrisonerRole = guild.members.cache.filter((member) =>
-        member.roles.cache.has(prisonerRole.id)
-      ) as unknown as GuildMember[];
-
-      if (
-        membersWithPrisonerRole.length === 1 &&
-        membersWithPrisonerRole[0].id === member.id
-      ) {
-        try {
-          await prisonerRole.delete();
-          console.log('Deleted "prisoner" role.');
-        } catch (error) {
-          console.error('Error deleting "prisoner" role:', error);
-        }
-      }
     } else {
       response += "You are not a prisoner.\n";
     }
