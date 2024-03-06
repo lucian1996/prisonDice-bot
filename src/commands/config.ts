@@ -12,28 +12,28 @@ module.exports = {
         .setDescription("The role to grant access to administrative commands.")
         .setRequired(true)
     )
-    .addStringOption((option) =>
+    .addChannelOption((option) =>
       option
         .setName("prison_channel")
         .setDescription("Set the designated prison channel.")
-        .setRequired(true)
+        .setRequired(false)
     )
-    .addStringOption((option) =>
+    .addIntegerOption((option) =>
       option
         .setName("dice_cooldown_minutes")
         .setDescription("Set a designated cooldown for dice rolls in minutes.")
-        .setRequired(true)
+        .setRequired(false)
     )
     .addIntegerOption((option) =>
       option
         .setName("dice_min_success")
-        .setDescription("Set the minimum success dice count.")
+        .setDescription("Set the minimum success dice roll out of 100.")
         .setRequired(false)
     )
     .addIntegerOption((option) =>
       option
         .setName("dice_max_success")
-        .setDescription("Set the maximum success dice count.")
+        .setDescription("Set the maximum success dice roll out of 100.")
         .setRequired(false)
     ),
   async execute(interaction: CommandInteraction) {
@@ -51,49 +51,58 @@ module.exports = {
     const minSuccessOption = interaction.options.get("dice_min_success");
     const maxSuccessOption = interaction.options.get("dice_max_success");
 
-    if (!adminRoleOption || !prisonChannelOption || !diceCooldownOption) {
+    if (!adminRoleOption) {
       return interaction.reply({
         content: "Missing required options.",
         ephemeral: true,
       });
     }
 
-    const adminRole: Role | APIRole | null | undefined = adminRoleOption.role;
-    const prisonChannel: string | number | boolean | undefined =
-      prisonChannelOption.value;
-    const diceCooldown: string | number | boolean | undefined =
-      diceCooldownOption.value;
-    const minSuccess: string | number | boolean | null =
-      minSuccessOption?.value ?? null;
-    const maxSuccess: string | number | boolean | null =
-      maxSuccessOption?.value ?? null;
+    // Check if minSuccess and maxSuccess are numbers and within the range of 0 to 100
+    const minSuccess: number | null =
+      typeof minSuccessOption === "number" &&
+      minSuccessOption >= 0 &&
+      minSuccessOption <= 100
+        ? minSuccessOption
+        : 0;
+    const maxSuccess: number | null =
+      typeof maxSuccessOption === "number" &&
+      maxSuccessOption >= 0 &&
+      maxSuccessOption <= 100
+        ? maxSuccessOption
+        : 100;
 
-    if (!adminRole || !prisonChannel || !diceCooldown) {
+    if (
+      (minSuccess !== null && (minSuccess < 0 || minSuccess > 100)) ||
+      (maxSuccess !== null && (maxSuccess < 0 || maxSuccess > 100))
+    ) {
       return interaction.reply({
-        content: "Invalid options provided.",
+        content: "Dice success range should be between 0 and 100.",
         ephemeral: true,
       });
     }
 
     const db = await connectToDatabase();
 
+    const adminRole = adminRoleOption.role;
+    const prisonChannelId = prisonChannelOption?.channel?.id;
+    const diceCooldown = diceCooldownOption ?? 0;
+
     // Update or insert admin role into the database
     await db
       .collection("config")
       .updateOne(
         { _id: "admin_role" },
-        { $set: { value: adminRole.id } },
+        { $set: { value: adminRole?.id } },
         { upsert: true }
       );
 
     // Update or insert prison channel into the database
-    await db
-      .collection("config")
-      .updateOne(
-        { _id: "prison_channel" },
-        { $set: { value: prisonChannel } },
-        { upsert: true }
-      );
+    await db.collection("config").updateOne(
+      { _id: "prison_channel" },
+      { $set: { value: prisonChannelId } }, // Extracting only the channel ID
+      { upsert: true }
+    );
 
     // Update or insert dice cooldown into the database
     await db
@@ -127,7 +136,7 @@ module.exports = {
     }
 
     await interaction.reply({
-      content: "Configuration updated successfully.",
+      content: "Configuration successfully updated .",
       ephemeral: true,
     });
   },
