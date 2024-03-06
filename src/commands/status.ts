@@ -1,16 +1,15 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
-import { CommandInteraction } from "discord.js";
+import { CommandInteraction, Role } from "discord.js";
 import { connectToDatabase } from "../utils/database";
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("status")
     .setDescription("Prints the current admin role and lists prisoners."),
+
   async execute(interaction: CommandInteraction) {
     try {
-      // Retrieve the admin role ID from the module
       const guild = interaction.guild;
-
       if (!guild) {
         await interaction.reply({
           content: "Error: Guild not found.",
@@ -28,13 +27,19 @@ module.exports = {
         ? adminRoleIdObject.value
         : undefined;
 
+      const prisonerRoleIdObject = await db
+        .collection("config")
+        .findOne({ _id: "prisoner_role" });
+      const prisonerRoleId = prisonerRoleIdObject
+        ? prisonerRoleIdObject.value
+        : undefined;
+
       const prisonChannelObject = await db
         .collection("config")
         .findOne({ _id: "prison_channel" });
       const prisonChannelId = prisonChannelObject
         ? prisonChannelObject.value
         : undefined;
-      const prisonChannel = guild.channels.cache.get(prisonChannelId);
 
       const diceCooldownMinutesObject = await db
         .collection("config")
@@ -57,26 +62,26 @@ module.exports = {
         ? diceMaxSuccessObject.value
         : undefined;
 
-      // Find the admin role based on the ID
       const adminRole = guild.roles.cache.get(adminRoleId);
-      console.log(adminRole);
+      const prisonerRole = guild.roles.cache.get(prisonerRoleId); // Moved the declaration here
 
-      // Check if the admin role exists
+      const prisonChannel = guild.channels.cache.get(prisonChannelId);
+
       if (adminRole) {
         let response = `Current Admin role is: ${adminRole}\n`;
+        response += `Current Prisoner role is: ${prisonerRole}\n`;
         response += `Prison Channel is: ${prisonChannel}\n`;
         response += `Dice Cooldown Minutes is: ${diceCooldownMinutes}\n`;
         response += `Dice Min Success is: ${diceMinSuccess}\n`;
         response += `Dice Max Success is: ${diceMaxSuccess}\n`;
 
-        // Find the prisoner role
-        const prisonerRole = guild.roles.cache.find(
+        const prisomerRole = guild.roles.cache.find(
           (role) => role.name === "prisoner"
         );
 
-        if (prisonerRole) {
+        if (prisomerRole) {
           const prisoners = guild.members.cache.filter((member) =>
-            member.roles.cache.has(prisonerRole.id)
+            member.roles.cache.has(prisomerRole.id)
           );
 
           if (prisoners.size > 0) {
@@ -88,6 +93,7 @@ module.exports = {
         } else {
           response += "There are no prisoners in this server.\n";
         }
+
         await interaction.reply({
           content: response,
           ephemeral: true,

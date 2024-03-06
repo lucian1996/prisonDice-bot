@@ -9,7 +9,13 @@ module.exports = {
     .addRoleOption((option) =>
       option
         .setName("admin_role")
-        .setDescription("The role to grant access to administrative commands.")
+        .setDescription("This role grants access to administrative commands.")
+        .setRequired(true)
+    )
+    .addRoleOption((option) =>
+      option
+        .setName("prisoner_role")
+        .setDescription("This role should have restricted permissions.")
         .setRequired(true)
     )
     .addChannelOption((option) =>
@@ -46,12 +52,13 @@ module.exports = {
     }
 
     const adminRoleOption = interaction.options.get("admin_role");
+    const prisonerRoleOption = interaction.options.get("prisoner_role");
     const prisonChannelOption = interaction.options.get("prison_channel");
     const diceCooldownOption = interaction.options.get("dice_cooldown_minutes");
     const minSuccessOption = interaction.options.get("dice_min_success");
     const maxSuccessOption = interaction.options.get("dice_max_success");
 
-    if (!adminRoleOption) {
+    if (!adminRoleOption || !prisonerRoleOption) {
       return interaction.reply({
         content: "Missing required options.",
         ephemeral: true,
@@ -85,6 +92,7 @@ module.exports = {
     const db = await connectToDatabase();
 
     const adminRole = adminRoleOption.role;
+    const prisonerRole = prisonerRoleOption.role;
     const prisonChannelId = prisonChannelOption?.channel?.id;
     const diceCooldown = diceCooldownOption ?? 0;
 
@@ -94,6 +102,15 @@ module.exports = {
       .updateOne(
         { _id: "admin_role" },
         { $set: { value: adminRole?.id } },
+        { upsert: true }
+      );
+
+    // Update or insert prisoner role into the database
+    await db
+      .collection("config")
+      .updateOne(
+        { _id: "prisoner_role" },
+        { $set: { value: prisonerRole?.id } },
         { upsert: true }
       );
 
