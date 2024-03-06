@@ -27,9 +27,10 @@ const getUserPreviousVoiceChannel = async (
   const userId = member.user.id;
   const db = await connectToDatabase();
   const userPreviousChannelData = await db
-    .collection("user_previous_channels")
+    .collection("user_previous_channel")
     .findOne({ _id: userId });
-  const previousChannelId = userPreviousChannelData?.channelId;
+
+  const previousChannelId = userPreviousChannelData?.channelId; // Access the channelId property
 
   if (!previousChannelId) {
     return undefined;
@@ -37,24 +38,6 @@ const getUserPreviousVoiceChannel = async (
 
   const previousChannel = member.guild.channels.cache.get(previousChannelId);
   return previousChannel instanceof VoiceChannel ? previousChannel : undefined;
-};
-
-const storeUserPreviousVoiceChannel = async (member: GuildMember) => {
-  const userId = member.user.id;
-  const currentChannel = member.voice.channel;
-  const db = await connectToDatabase();
-
-  if (currentChannel) {
-    await db
-      .collection("user_previous_channels")
-      .updateOne(
-        { _id: userId },
-        { $set: { channelId: currentChannel.id } },
-        { upsert: true }
-      );
-  } else {
-    await db.collection("user_previous_channels").deleteOne({ _id: userId });
-  }
 };
 
 const respondAndExit = async (
@@ -141,6 +124,7 @@ module.exports = {
             await member.roles.remove(prisonerRole);
 
             const previousChannel = await getUserPreviousVoiceChannel(member);
+            console.log(previousChannel);
             if (previousChannel) {
               await member.voice.setChannel(previousChannel);
               response += `You have been moved back to ${previousChannel.name}.\n`;

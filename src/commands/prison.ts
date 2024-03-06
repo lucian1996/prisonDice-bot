@@ -8,8 +8,6 @@ import {
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { connectToDatabase } from "../utils/database";
 
-const userRolesMap: Map<string, string[]> = new Map();
-
 const checkPermission = async (
   interaction: CommandInteraction,
   adminRoleId: string
@@ -67,6 +65,25 @@ const updateUserRoles = async (
     console.log(`User roles for ${user.username} updated in the database.`);
   } catch (error) {
     console.log("Error updating user roles in the database:", error);
+  }
+};
+
+const storeUserPreviousVoiceChannel = async (
+  db: Awaited<ReturnType<typeof connectToDatabase>>,
+  member: GuildMember,
+  prisonChannel: VoiceChannel
+) => {
+  const userId = member.user.id;
+  const currentChannelId = member.voice.channelId; // Fetch current voice channel ID
+
+  if (currentChannelId && currentChannelId !== prisonChannel.id) {
+    await db.collection("user_previous_channel").updateOne(
+      { _id: userId },
+      { $set: { channelId: currentChannelId } }, // Use the fetched channel ID
+      { upsert: true }
+    );
+  } else {
+    await db.collection("user_previous_channel").deleteOne({ _id: userId });
   }
 };
 
@@ -152,6 +169,9 @@ module.exports = {
       await targetMember.roles.remove(rolesToRemove);
       await targetMember.roles.add(prisonerRole);
 
+      // Store the user's previous voice channel before moving them
+      await storeUserPreviousVoiceChannel(db, targetMember, prisonChannel);
+
       if (targetMember.voice.channel) {
         await targetMember.voice.setChannel(prisonChannel);
         await respondAndExit(
@@ -161,7 +181,7 @@ module.exports = {
       } else {
         await respondAndExit(
           interaction,
-          `Added the "prisoner" role to ${user}. They were not in a voice channel.`
+          `Added the "prisoner" role to ${user}.`
         );
       }
     } catch (error) {
@@ -169,5 +189,3 @@ module.exports = {
     }
   },
 };
-
-export { userRolesMap };
