@@ -75,7 +75,7 @@ module.exports = {
     const adminRoleId = adminRoleDbObj?.value;
 
     if (!adminRoleId) {
-      await respondAndExit(interaction, "Admin role not configured.");
+      await respondAndExit(interaction, "Admin role not configured.", true);
       return;
     }
 
@@ -88,14 +88,15 @@ module.exports = {
     if (!hasPermission) {
       await respondAndExit(
         interaction,
-        "You don't have permission to prison other users."
+        "You don't have permission to prison other users.",
+        true
       );
       return;
     }
 
     const user = interaction.options.getUser("user");
     if (!user) {
-      await respondAndExit(interaction, "User not found.");
+      await respondAndExit(interaction, "User not found.", true);
       return;
     }
 
@@ -125,16 +126,22 @@ module.exports = {
         }
         await respondAndExit(
           interaction,
-          `Moved ${user} to the prison voice channel and added the "prisoner" role.`
+          `${user} has been booted out of chat and is now a prisoner.`,
+          false
         );
       } else {
         await respondAndExit(
           interaction,
-          `Added the "prisoner" role to ${user}.`
+          `${user} is now a prisoner.`,
+          false
         );
       }
     } catch (error) {
-      await respondAndExit(interaction, `Failed to prison ${user}: ${error}`);
+      await respondAndExit(
+        interaction,
+        `Failed to prison ${user}: ${error}`,
+        true
+      );
     }
   },
 };

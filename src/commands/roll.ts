@@ -1,54 +1,46 @@
+// Import necessary modules
 import { SlashCommandBuilder } from "@discordjs/builders";
-import {
-  CommandInteraction,
-  GuildMember,
-  Role,
-  VoiceChannel,
-} from "discord.js";
+import { CommandInteraction, GuildMember, Role } from "discord.js";
 import { connectToDatabase } from "../utils/database";
-import { getPrisonerRole, respondAndExit } from "../utils/utils";
+import {
+  getPrisonerRole,
+  getUserPreviousVoiceChannel,
+  respondAndExit,
+} from "../utils/utils";
 
+// Define interfaces and maps
 interface UserRolesMap extends Map<string, Role[]> {}
-
 const userRolesMap: UserRolesMap = new Map();
 const cooldowns: Map<string, number> = new Map();
 
-// Function to check if a user is on cooldown
+// Function to check cooldown status
 function checkCooldown(
+  memberId: string,
+  cooldowns: Map<string, number>
+): boolean {
+  const now = Date.now();
+  const expirationTime = cooldowns.get(memberId) || 0;
+  return now < expirationTime;
+}
+
+// Function to add cooldown for a user
+function addCooldown(
   memberId: string,
   cooldowns: Map<string, number>,
   cooldownAmount: number
-): boolean {
+): void {
   const now = Date.now();
-  const expirationTime = cooldowns.get(memberId) || 0 + cooldownAmount;
-  if (now < expirationTime) {
-    return true; // User is on cooldown
-  }
-  return false; // User is not on cooldown
+  const expirationTime = now + cooldownAmount;
+  cooldowns.set(memberId, expirationTime);
 }
 
-const getUserPreviousVoiceChannel = async (
-  member: GuildMember
-): Promise<VoiceChannel | undefined> => {
-  const userId = member.user.id;
-  const db = await connectToDatabase();
-
-  const userPreviousChannelDbObj = await db
-    .collection("user_previous_channel")
-    .findOne({ id: userId });
-  const previousChannelId = userPreviousChannelDbObj?.channelId;
-  if (!previousChannelId) {
-    return undefined;
-  } // Return if no Previous Channel ID
-
-  const previousChannel = member.guild.channels.cache.get(previousChannelId);
-  return previousChannel instanceof VoiceChannel ? previousChannel : undefined;
-};
-
 module.exports = {
+  // Define command data
   data: new SlashCommandBuilder()
     .setName("roll")
     .setDescription("Roll a dice to allow a user to gamble for their freedom."),
+
+  // Execute command function
   async execute(interaction: CommandInteraction) {
     let response = "";
     const now = Date.now();
@@ -60,59 +52,55 @@ module.exports = {
     let minSuccess = 0;
     let maxSuccess = 0;
 
+    // Extract configuration values
     config.forEach((item: { id: string; value: number }) => {
-      if (item.id === "dice_cooldown_minutes") {
-        diceCooldown = item.value;
-      } else if (item.id === "dice_min_success") {
-        minSuccess = item.value;
-      } else if (item.id === "dice_max_success") {
-        maxSuccess = item.value;
-      }
+      if (item.id === "dice_cooldown_minutes") diceCooldown = item.value;
+      else if (item.id === "dice_min_success") minSuccess = item.value;
+      else if (item.id === "dice_max_success") maxSuccess = item.value;
     });
 
     const cooldownAmount = diceCooldown * 1000 * 60; // Convert minutes to milliseconds
-    const expirationTime = cooldowns.get(member.id) || 0 + cooldownAmount; // Define expirationTime here
-
-    const isOnCooldown = checkCooldown(member.id, cooldowns, cooldownAmount);
+    const isOnCooldown = checkCooldown(member.id, cooldowns);
     if (isOnCooldown) {
-      const timeLeftMinutes = (expirationTime - now) / 1000 / 60;
+      const remainingCooldown = (cooldowns.get(member.id) ?? now) - now; // Use optional chaining and provide 'now' as a default value if undefined
+      const timeLeftMinutes = Math.ceil(remainingCooldown / (1000 * 60)); // Convert remaining milliseconds to minutes and round up
       await respondAndExit(
         interaction,
-        `Unlucky, please wait ${timeLeftMinutes.toFixed(
-          1
-        )} more minutes before reusing the \`roll\` command.`
+        `Unlucky, please wait ${timeLeftMinutes} more minutes before reusing the \`roll\` command.`,
+        true
       );
       return;
     }
 
+    // Check if user is a prisoner
     if (member.roles.cache.some((role) => role.name === "prisoner")) {
+      // Generate random dice rolls
       response += `Must roll ${minSuccess}/${maxSuccess} to redeem privileges.\n`;
       const roll1 = Math.floor(Math.random() * 50) + 1;
       const roll2 = Math.floor(Math.random() * 50) + 1;
       response += `Rolling... **${roll1}, ${roll2}**\n`;
-
       response += `You rolled a ${roll1 + roll2}\n`;
 
+      // Retrieve user roles and prisoner role
       const userRolesData = await db
         .collection("user_roles")
         .findOne({ id: member.id });
       const userRoles = userRolesData?.roles || [];
       const prisonerRole = await getPrisonerRole(db);
 
+      // Process dice roll result
       if (roll1 + roll2 >= minSuccess && roll1 + roll2 <= maxSuccess) {
         if (userRoles.length > 0) {
           try {
+            // Restore user roles and privileges
             await member.roles.add(userRoles);
             userRolesMap.delete(member.user.id);
-
             await member.roles.remove(prisonerRole);
-
             const previousChannel = await getUserPreviousVoiceChannel(member);
             if (previousChannel) {
               await member.voice.setChannel(previousChannel);
               response += `You have been moved back to ${previousChannel.name}.\n`;
             }
-
             response += "Your privileges are restored.\n";
           } catch (error) {
             console.log("Error restoring user roles and voice channel:", error);
@@ -124,14 +112,13 @@ module.exports = {
         }
       } else {
         response += "Unlucky. Try again next time.\n";
+        addCooldown(member.id, cooldowns, cooldownAmount); // Add cooldown for the user
       }
-
-      cooldowns.set(member.id, now);
-      setTimeout(() => cooldowns.delete(member.id), cooldownAmount); // Remove cooldown after specified time
     } else {
       response += "You are not a prisoner.\n";
     }
 
-    await respondAndExit(interaction, response);
+    // Send response and exit
+    await respondAndExit(interaction, response, false);
   },
 };
