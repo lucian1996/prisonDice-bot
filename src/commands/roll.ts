@@ -66,8 +66,8 @@ module.exports = {
       const timeLeftMinutes = Math.ceil(remainingCooldown / (1000 * 60)); // Convert remaining milliseconds to minutes and round up
       await respondAndExit(
         interaction,
-        `Unlucky, please wait ${timeLeftMinutes} more minutes before reusing the \`roll\` command.`,
-        true
+        `Unlucky, please wait ${timeLeftMinutes} more minutes before attempting to \`roll\` for freedom.`,
+        false
       );
       return;
     }
