@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { CommandInteraction } from "discord.js";
 import { connectToDatabase } from "../utils/database";
+import { checkPermission, respondAndExit } from "../utils/utils";
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -52,6 +53,21 @@ module.exports = {
         });
       }
 
+      const db = await connectToDatabase();
+      const adminRoleDbObj = await db
+        .collection("config")
+        .findOne({ id: "admin_role" });
+      const adminRoleId = adminRoleDbObj?.value;
+      const hasPermission = await checkPermission(interaction, adminRoleId);
+      if (!hasPermission) {
+        await respondAndExit(
+          interaction,
+          "You don't have permission to prison other users.",
+          true
+        );
+        return;
+      }
+      
       const adminRoleOption = interaction.options.get("admin_role");
       const prisonerRoleOption = interaction.options.get("prisoner_role");
       const prisonChannelOption = interaction.options.get("prison_channel");
@@ -95,7 +111,6 @@ module.exports = {
       const prisonChannelId = prisonChannelOption?.channel?.id;
 
       // Update database
-      const db = await connectToDatabase();
       await db
         .collection("config")
         .updateOne(
