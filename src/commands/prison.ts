@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import { SlashCommandBuilder } from "@discordjs/builders";
 import { connectToDatabase } from "../utils/database";
+import { respondAndExit } from "../utils/utils";
 
 const checkPermission = async (
   interaction: CommandInteraction,
@@ -14,13 +15,6 @@ const checkPermission = async (
 ): Promise<boolean> => {
   const member = interaction.member as GuildMember;
   return member?.roles.cache.some((role) => role.id === adminRoleId);
-};
-
-const respondAndExit = async (
-  interaction: CommandInteraction,
-  content: string
-) => {
-  await interaction.reply({ content, ephemeral: true });
 };
 
 const getPrisonerRole = async (
@@ -61,7 +55,7 @@ const updateUserRoles = async (
   try {
     await db
       .collection("user_roles")
-      .updateOne({ _id: user.id }, { $set: { roles } }, { upsert: true });
+      .updateOne({ id: user.id }, { $set: { roles } }, { upsert: true });
     console.log(`User roles for ${user.username} updated in the database.`);
   } catch (error) {
     console.log("Error updating user roles in the database:", error);
@@ -78,12 +72,12 @@ const storeUserPreviousVoiceChannel = async (
 
   if (currentChannelId && currentChannelId !== prisonChannel.id) {
     await db.collection("user_previous_channel").updateOne(
-      { _id: userId },
+      { id: userId },
       { $set: { channelId: currentChannelId } }, // Use the fetched channel ID
       { upsert: true }
     );
   } else {
-    await db.collection("user_previous_channel").deleteOne({ _id: userId });
+    await db.collection("user_previous_channel").deleteOne({ id: userId });
   }
 };
 
@@ -102,7 +96,7 @@ module.exports = {
 
   async execute(interaction: CommandInteraction) {
     const db = await connectToDatabase();
-    const config = await db.collection("config").findOne({ _id: "admin_role" });
+    const config = await db.collection("config").findOne({ id: "admin_role" });
     const adminRoleId = config?.value;
 
     if (!adminRoleId) {
@@ -112,12 +106,12 @@ module.exports = {
 
     const prisonConfig = await db
       .collection("config")
-      .findOne({ _id: "prison_channel" });
+      .findOne({ id: "prison_channel" });
     const prisonChannelId = prisonConfig?.value;
 
     const prisonerRoleConfig = await db
       .collection("config")
-      .findOne({ _id: "prisoner_role" });
+      .findOne({ id: "prisoner_role" });
     const prisonerRoleId = prisonerRoleConfig?.value;
 
     const hasPermission = await checkPermission(interaction, adminRoleId);

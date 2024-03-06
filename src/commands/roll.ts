@@ -6,6 +6,7 @@ import {
   VoiceChannel,
 } from "discord.js";
 import { connectToDatabase } from "../utils/database";
+import { respondAndExit } from "../utils/utils";
 
 interface UserRolesMap extends Map<string, Role[]> {}
 
@@ -28,7 +29,7 @@ const getUserPreviousVoiceChannel = async (
   const db = await connectToDatabase();
   const userPreviousChannelData = await db
     .collection("user_previous_channel")
-    .findOne({ _id: userId });
+    .findOne({ id: userId });
 
   const previousChannelId = userPreviousChannelData?.channelId; // Access the channelId property
 
@@ -38,13 +39,6 @@ const getUserPreviousVoiceChannel = async (
 
   const previousChannel = member.guild.channels.cache.get(previousChannelId);
   return previousChannel instanceof VoiceChannel ? previousChannel : undefined;
-};
-
-const respondAndExit = async (
-  interaction: CommandInteraction,
-  content: string
-) => {
-  await interaction.reply({ content, ephemeral: true });
 };
 
 module.exports = {
@@ -73,12 +67,12 @@ module.exports = {
     let minSuccess = 0;
     let maxSuccess = 0;
 
-    config.forEach((item: { _id: string; value: number }) => {
-      if (item._id === "dice_cooldown_minutes") {
+    config.forEach((item: { id: string; value: number }) => {
+      if (item.id === "dice_cooldown_minutes") {
         diceCooldown = item.value;
-      } else if (item._id === "dice_min_success") {
+      } else if (item.id === "dice_min_success") {
         minSuccess = item.value;
-      } else if (item._id === "dice_max_success") {
+      } else if (item.id === "dice_max_success") {
         maxSuccess = item.value;
       }
     });
@@ -113,7 +107,7 @@ module.exports = {
 
       const userRolesData = await db
         .collection("user_roles")
-        .findOne({ _id: member.id });
+        .findOne({ id: member.id });
       const userRoles = userRolesData?.roles || [];
 
       if (roll1 + roll2 >= minSuccess && roll1 + roll2 <= maxSuccess) {

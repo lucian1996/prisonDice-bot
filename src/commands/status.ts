@@ -1,113 +1,74 @@
 import { SlashCommandBuilder } from "@discordjs/builders";
-import { CommandInteraction, Role } from "discord.js";
+import { CommandInteraction } from "discord.js";
 import { connectToDatabase } from "../utils/database";
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("status")
     .setDescription("Prints the current admin role and lists prisoners."),
-
   async execute(interaction: CommandInteraction) {
     try {
       const guild = interaction.guild;
       if (!guild) {
-        await interaction.reply({
+        return await interaction.reply({
           content: "Error: Guild not found.",
           ephemeral: true,
         });
-        return;
       }
 
       const db = await connectToDatabase();
-
-      const adminRoleIdObject = await db
+      const configValues: { id: string; value: string | undefined }[] = await db
         .collection("config")
-        .findOne({ _id: "admin_role" });
-      const adminRoleId = adminRoleIdObject
-        ? adminRoleIdObject.value
-        : undefined;
+        .find({})
+        .toArray();
 
-      const prisonerRoleIdObject = await db
-        .collection("config")
-        .findOne({ _id: "prisoner_role" });
-      const prisonerRoleId = prisonerRoleIdObject
-        ? prisonerRoleIdObject.value
-        : undefined;
+      const configMap = new Map(
+        configValues.map(({ id, value }) => [id, value])
+      );
 
-      const prisonChannelObject = await db
-        .collection("config")
-        .findOne({ _id: "prison_channel" });
-      const prisonChannelId = prisonChannelObject
-        ? prisonChannelObject.value
-        : undefined;
+      const adminRoleId = configMap.get("admin_role");
+      const prisonerRoleId = configMap.get("prisoner_role");
+      const prisonChannelId = configMap.get("prison_channel");
+      const diceCooldownMinutes = configMap.get("dice_cooldown_minutes");
+      const diceMinSuccess = configMap.get("dice_min_success");
+      console.log(diceMinSuccess);
+      const diceMaxSuccess = configMap.get("dice_max_success");
 
-      const diceCooldownMinutesObject = await db
-        .collection("config")
-        .findOne({ _id: "dice_cooldown_minutes" });
-      const diceCooldownMinutes = diceCooldownMinutesObject
-        ? diceCooldownMinutesObject.value
-        : undefined;
+      const adminRole = guild.roles.cache.get(adminRoleId as string);
+      const prisonerRole = guild.roles.cache.get(prisonerRoleId as string);
+      const prisonChannel = guild.channels.cache.get(prisonChannelId as string);
 
-      const diceMinSuccessObject = await db
-        .collection("config")
-        .findOne({ _id: "dice_min_success" });
-      const diceMinSuccess = diceMinSuccessObject
-        ? diceMinSuccessObject.value
-        : undefined;
+      let response = `Current Admin role is: ${adminRole || "Not set"}\n`;
+      response += `Current Prisoner role is: ${prisonerRole || "Not set"}\n`;
+      response += `Prison Channel is: ${prisonChannel || "Not set"}\n`;
+      response += `Dice Cooldown Minutes is: ${
+        diceCooldownMinutes || "Not set"
+      }\n`;
+      response += `Dice Min Success is: ${diceMinSuccess || "Not set"}\n`;
+      response += `Dice Max Success is: ${diceMaxSuccess || "Not set"}\n`;
 
-      const diceMaxSuccessObject = await db
-        .collection("config")
-        .findOne({ _id: "dice_max_success" });
-      const diceMaxSuccess = diceMaxSuccessObject
-        ? diceMaxSuccessObject.value
-        : undefined;
+      const prisonerRoleName = "prisoner";
+      const prisoners = guild.members.cache.filter((member) =>
+        member.roles.cache.some((role) => role.name === prisonerRoleName)
+      );
 
-      const adminRole = guild.roles.cache.get(adminRoleId);
-      const prisonerRole = guild.roles.cache.get(prisonerRoleId); // Moved the declaration here
-
-      const prisonChannel = guild.channels.cache.get(prisonChannelId);
-
-      if (adminRole) {
-        let response = `Current Admin role is: ${adminRole}\n`;
-        response += `Current Prisoner role is: ${prisonerRole}\n`;
-        response += `Prison Channel is: ${prisonChannel}\n`;
-        response += `Dice Cooldown Minutes is: ${diceCooldownMinutes}\n`;
-        response += `Dice Min Success is: ${diceMinSuccess}\n`;
-        response += `Dice Max Success is: ${diceMaxSuccess}\n`;
-
-        const prisomerRole = guild.roles.cache.find(
-          (role) => role.name === "prisoner"
-        );
-
-        if (prisomerRole) {
-          const prisoners = guild.members.cache.filter((member) =>
-            member.roles.cache.has(prisomerRole.id)
-          );
-
-          if (prisoners.size > 0) {
-            response += "Users with the prisoner role:\n";
-            prisoners.forEach((member) => {
-              response += `- ${member.user.username}\n`;
-            });
-          }
-        } else {
-          response += "There are no prisoners in this server.\n";
-        }
-
-        await interaction.reply({
-          content: response,
-          ephemeral: true,
+      if (prisoners.size > 0) {
+        response += "Users with the prisoner role:\n";
+        prisoners.forEach((member) => {
+          response += `- ${member.user.username}\n`;
         });
       } else {
-        await interaction.reply({
-          content: "Admin role has not been set.",
-          ephemeral: true,
-        });
+        response += "There are no prisoners in this server.\n";
       }
-    } catch (error) {
-      console.error("Error retrieving admin role:", error);
+
       await interaction.reply({
-        content: "An error occurred while retrieving the admin role.",
+        content: response,
+        ephemeral: true,
+      });
+    } catch (error) {
+      console.error("An error occurred while retrieving status:", error);
+      await interaction.reply({
+        content: "An error occurred while retrieving the status.",
         ephemeral: true,
       });
     }
